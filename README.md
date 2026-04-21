@@ -1,6 +1,6 @@
-# Email Tone Fine-Tuning with LoRA
+# Email Fine-Tuning with LoRA
 
-Fine-tuning **Gemma 3 270M** using **LoRA (Low-Rank Adaptation)** to rewrite workplace emails in different tones. Built as a progression from a baseline tutorial to an original multi-tone conditioning model.
+Fine-tuning **Gemma 3 270M** using **LoRA (Low-Rank Adaptation)** across multiple email tasks: rewriting blunt emails in different tones and fixing grammar and clarity issues. Built as a progression from a baseline tutorial to two original fine-tuned models.
 
 ---
 
@@ -33,37 +33,42 @@ PERSUASIVE → I wanted to flag that the deadline has passed on this deliverable
 ## Project Structure
 
 ```
-├── datasets/
-│   ├── generate_emails_dataset.py   # Generates baseline email pairs
-│   ├── generate_tone_dataset.py     # Generates 4-tone dataset (80 examples)
-│   ├── emails.jsonl                 # Baseline training data
-│   └── tone_emails.jsonl            # Tone transformer training data
-│
 ├── Part 1 — Email Rewriter (Baseline + Improved)
-│   ├── interactive_train.py         # Intentional failure demo (model collapse)
+│   ├── generate_emails_dataset.py       # Generates baseline email pairs
+│   ├── emails.jsonl                     # Baseline training data
+│   ├── interactive_train.py             # Intentional failure demo (model collapse)
 │   ├── interactive_train_improved.py
 │   ├── train_email_tone_rewriter_improved.py
 │   ├── interactive_test_improved.py
-│   ├── compare_models.py            # Base vs Instruct vs Fine-tuned
-│   └── compare_all_models.py        # 4-way comparison including poor LoRA
+│   ├── compare_models.py                # Base vs Instruct vs Fine-tuned
+│   └── compare_all_models.py            # 4-way comparison including poor LoRA
 │
-└── Part 2 — Tone Transformer (Original Extension)
-    ├── train_tone_transformer.py
-    ├── interactive_test_tone.py     # Interactive demo with tone selection
-    └── compare_tones.py             # Side-by-side all 4 tones
+├── Part 2 — Tone Transformer
+│   ├── generate_tone_dataset.py         # Generates 4-tone dataset (80 examples)
+│   ├── tone_emails.jsonl                # Tone transformer training data
+│   ├── train_tone_transformer.py
+│   ├── interactive_test_tone.py         # Interactive demo with tone selection
+│   └── compare_tones.py                 # Side-by-side all 4 tones
+│
+└── Part 3 — Email Improver
+    ├── generate_email_improver_dataset.py  # Generates grammar/clarity dataset (35 examples)
+    ├── email_improver.jsonl                # Improver training data
+    ├── train_email_improver.py
+    ├── interactive_test_improver.py        # Interactive before/after demo
+    └── compare_improver.py                 # Batch before/after comparison
 ```
 
 ---
 
 ## The Story Behind It
 
-This project has three acts:
-
 **Act 1 — Baseline**: Fine-tune Gemma 3 to rewrite blunt emails professionally using LoRA. The first attempt (`interactive_train.py`) deliberately uses a high learning rate and too few epochs to demonstrate **model collapse** — where the model produces repetitive, broken output. This is an intentional lesson.
 
 **Act 2 — Fix It**: Identify what went wrong (learning rate too high, insufficient epochs, no cosine scheduling) and produce a stable fine-tuned model. Also diagnoses and fixes MPS-specific crashes on Apple Silicon related to a 4GB per-NDArray hard limit in Metal Performance Shaders.
 
-**Act 3 — Extend It**: Design a custom multi-tone dataset from scratch (20 blunt emails × 4 tones = 80 training examples), train a model that conditions on the tone instruction, and build an interactive demo. This is the original contribution — the model learns that the same blunt message should produce structurally different rewrites depending on the tone word in the prompt.
+**Act 3 — Tone Transformer**: Design a custom multi-tone dataset from scratch (20 blunt emails × 4 tones = 80 training examples), train a model that conditions on the tone instruction, and build an interactive demo. The model learns that the same blunt message should produce structurally different rewrites depending on the tone word in the prompt.
+
+**Act 4 — Email Improver**: Build a Grammarly-lite model fine-tuned to fix grammar errors and improve sentence clarity while preserving the original meaning and voice. Trained on 35 examples covering subject-verb agreement, tense consistency, run-on sentences, ambiguous pronouns, and wordiness.
 
 ---
 
@@ -152,6 +157,35 @@ python compare_tones.py "Your code broke the build and the client is furious."
 
 ---
 
+### Part 3 — Email Improver
+
+**Generate the grammar/clarity dataset:**
+```bash
+python generate_email_improver_dataset.py
+```
+
+**Train the improver model:**
+```bash
+python train_email_improver.py
+```
+
+**Interactive demo — paste any email with errors:**
+```bash
+python interactive_test_improver.py
+```
+
+**Batch before/after comparison (4 built-in examples):**
+```bash
+python compare_improver.py
+```
+
+**Single custom email:**
+```bash
+python compare_improver.py "The team are struggling and we needs more time."
+```
+
+---
+
 ## Key Technical Decisions
 
 **Why LoRA?** Training all 270M parameters is expensive. LoRA freezes the base model and trains only small low-rank adapter matrices (~15MB), which is fast and memory-efficient without sacrificing task-specific quality.
@@ -162,13 +196,16 @@ python compare_tones.py "Your code broke the build and the client is furious."
 
 **Tone conditioning**: The model learns to condition output style on the tone word in the instruction prefix (`"Rewrite in a {tone} tone: ..."`). Each blunt email in the dataset has 4 distinct rewrites, so the model sees the same input mapped to 4 structurally different outputs and learns that the tone word is the discriminating signal.
 
+**Grammar and clarity**: The Email Improver uses a single instruction prefix (`"Fix the grammar and improve clarity: ..."`). The dataset covers three categories — grammar only, clarity only, and both — so the model learns to handle each type of issue independently and in combination.
+
 ---
 
 ## Limitations
 
-- **270M parameters is small.** The model generalizes well to inputs similar to its training distribution (workplace behavior feedback, deadlines, code quality). It degrades on inputs far from that distribution because a small model can't generalize as broadly.
-- **80 training examples** is enough to learn tone patterns but not enough for robust semantic preservation across all input types. A larger dataset or a larger base model would improve meaning retention.
-- **Subject confusion** occasionally occurs on direct personal criticisms — the model sometimes flips who is speaking. This is a known failure mode for small models on out-of-distribution inputs.
+- **270M parameters is small.** The model generalizes well to inputs similar to its training distribution. It degrades on inputs far from that distribution because a small model can't generalize as broadly as a larger one.
+- **Small datasets.** 80 examples (Tone Transformer) and 35 examples (Email Improver) are sufficient to learn the target patterns but not enough for robust semantic preservation across all input types. A larger dataset or a larger base model would improve meaning retention.
+- **Complex multi-fix inputs** occasionally cause the Email Improver to drop content or introduce minor errors when an email requires several simultaneous corrections. The model handles isolated errors reliably but degrades on inputs needing multiple fixes at once.
+- **Subject confusion** occasionally occurs — the model sometimes flips who is speaking. This is a known failure mode for small models on out-of-distribution inputs.
 
 ---
 
