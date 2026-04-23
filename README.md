@@ -1,6 +1,6 @@
 # Email Fine-Tuning with LoRA
 
-Fine-tuning **Gemma 3 270M** using **LoRA (Low-Rank Adaptation)** across multiple email tasks: rewriting blunt emails in different tones and fixing grammar and clarity issues. Built as a progression from a baseline tutorial to two original fine-tuned models.
+Fine-tuning **Gemma 3 270M** using **LoRA (Low-Rank Adaptation)** across multiple email tasks: tone rewriting, grammar and clarity improvement, and flexible instruction following. Built as a progression from a baseline tutorial to three original fine-tuned models.
 
 ---
 
@@ -50,12 +50,19 @@ PERSUASIVE → I wanted to flag that the deadline has passed on this deliverable
 │   ├── interactive_test_tone.py         # Interactive demo with tone selection
 │   └── compare_tones.py                 # Side-by-side all 4 tones
 │
-└── Part 3 — Email Improver
-    ├── generate_email_improver_dataset.py  # Generates grammar/clarity dataset (35 examples)
-    ├── email_improver.jsonl                # Improver training data
-    ├── train_email_improver.py
-    ├── interactive_test_improver.py        # Interactive before/after demo
-    └── compare_improver.py                 # Batch before/after comparison
+├── Part 3 — Email Improver
+│   ├── generate_email_improver_dataset.py  # Generates grammar/clarity dataset (35 examples)
+│   ├── email_improver.jsonl                # Improver training data
+│   ├── train_email_improver.py
+│   ├── interactive_test_improver.py        # Interactive before/after demo
+│   └── compare_improver.py                 # Batch before/after comparison
+│
+└── Part 4 — Instruction-Based Model
+    ├── generate_instruction_dataset.py     # Generates flexible instruction dataset (46 examples)
+    ├── instruction_emails.jsonl            # Instruction model training data
+    ├── train_instruction_model.py
+    ├── interactive_test_instruction.py     # Enter any instruction + any email
+    └── compare_instructions.py            # Same email, 5 different instructions
 ```
 
 ---
@@ -69,6 +76,8 @@ PERSUASIVE → I wanted to flag that the deadline has passed on this deliverable
 **Act 3 — Tone Transformer**: Design a custom multi-tone dataset from scratch (20 blunt emails × 4 tones = 80 training examples), train a model that conditions on the tone instruction, and build an interactive demo. The model learns that the same blunt message should produce structurally different rewrites depending on the tone word in the prompt.
 
 **Act 4 — Email Improver**: Build a Grammarly-lite model fine-tuned to fix grammar errors and improve sentence clarity while preserving the original meaning and voice. Trained on 35 examples covering subject-verb agreement, tense consistency, run-on sentences, ambiguous pronouns, and wordiness.
+
+**Act 5 — Instruction-Based Model**: Move from fixed tasks to flexible instruction following. The model receives a free-form instruction alongside the email and adapts its output accordingly — the same email can be rewritten assertively, apologetically, concisely, or grammatically depending on what the instruction says. Trained on 46 examples across 10+ instruction types. This is the closest architecture to how real-world LLMs operate.
 
 ---
 
@@ -186,6 +195,35 @@ python compare_improver.py "The team are struggling and we needs more time."
 
 ---
 
+### Part 4 — Instruction-Based Model
+
+**Generate the instruction dataset:**
+```bash
+python generate_instruction_dataset.py
+```
+
+**Train the instruction model:**
+```bash
+python train_instruction_model.py
+```
+
+**Interactive demo — enter any instruction and any email:**
+```bash
+python interactive_test_instruction.py
+```
+
+**Same email, 5 different instructions (default email):**
+```bash
+python compare_instructions.py
+```
+
+**Same email, 5 different instructions (custom email):**
+```bash
+python compare_instructions.py "Can you maybe look at the bug when you get a chance?"
+```
+
+---
+
 ## Key Technical Decisions
 
 **Why LoRA?** Training all 270M parameters is expensive. LoRA freezes the base model and trains only small low-rank adapter matrices (~15MB), which is fast and memory-efficient without sacrificing task-specific quality.
@@ -198,6 +236,8 @@ python compare_improver.py "The team are struggling and we needs more time."
 
 **Grammar and clarity**: The Email Improver uses a single instruction prefix (`"Fix the grammar and improve clarity: ..."`). The dataset covers three categories — grammar only, clarity only, and both — so the model learns to handle each type of issue independently and in combination.
 
+**Instruction following**: The Instruction-Based model uses a two-line prompt format (`Instruction: ...\nEmail: ...`). Unlike all previous models where the task is fixed, here the instruction varies per example across 10+ types (polite, assertive, friendly, concise, fix grammar, avoid blame, etc.). The model learns that the instruction field — not a fixed prefix — defines the task, which is how production LLMs work.
+
 ---
 
 ## Limitations
@@ -206,6 +246,7 @@ python compare_improver.py "The team are struggling and we needs more time."
 - **Small datasets.** 80 examples (Tone Transformer) and 35 examples (Email Improver) are sufficient to learn the target patterns but not enough for robust semantic preservation across all input types. A larger dataset or a larger base model would improve meaning retention.
 - **Complex multi-fix inputs** occasionally cause the Email Improver to drop content or introduce minor errors when an email requires several simultaneous corrections. The model handles isolated errors reliably but degrades on inputs needing multiple fixes at once.
 - **Subject confusion** occasionally occurs — the model sometimes flips who is speaking. This is a known failure mode for small models on out-of-distribution inputs.
+- **Instruction generalization** in the Instruction-Based model works well for tone changes but occasionally breaks on inputs where understanding who is doing what requires deeper semantic reasoning than a 270M model can reliably provide.
 
 ---
 
